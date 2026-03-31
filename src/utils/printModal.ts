@@ -9,6 +9,7 @@ import { Printd } from 'printd'
  * @param cssString 
  * @returns 
  */
+
 export async function openPrintModal(content: HTMLElement, settings: PrintPluginSettings, cssString: string): Promise<void> {
     const htmlElement = document.createElement('html');
     const headElement = document.createElement('head');
@@ -17,9 +18,12 @@ export async function openPrintModal(content: HTMLElement, settings: PrintPlugin
     titleElement.textContent = 'Print note';
     headElement.appendChild(titleElement);
 
+    const mathJaxStyles = getMathJaxStyles();
+    const combinedCssString = mathJaxStyles + '\n' + cssString;
+
     if (settings.debugMode) {
         const styleElement = document.createElement('style');
-        styleElement.textContent = cssString;
+        styleElement.textContent = combinedCssString;
         headElement.appendChild(styleElement);
     }
 
@@ -35,9 +39,10 @@ export async function openPrintModal(content: HTMLElement, settings: PrintPlugin
      * This uses Electron to open a window with HTML content in order to inspect it when debug mode is turned on.
      */
     if (settings.debugMode) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { remote } = (window as any).require("electron");
 
-        let printWindow = new remote.BrowserWindow({
+        const printWindow = new remote.BrowserWindow({
             width: 800,
             height: 600,
             show: true,
@@ -59,6 +64,34 @@ export async function openPrintModal(content: HTMLElement, settings: PrintPlugin
         });
     }
 
-    const d = new Printd()
-    d.print(htmlElement, [cssString])
+    const d = new Printd();
+    d.print(htmlElement, [combinedCssString]);
+}
+
+/**
+ * Extracts dynamically injected CSS rules from the CSSOM.
+ * Critical for MathJax CHTML rendering.
+ * Extracted for easy toggling via plugin settings.
+ */
+function getMathJaxStyles(): string {
+    let styles = '';
+    Array.from(document.styleSheets).forEach(sheet => {
+        if (sheet.ownerNode && sheet.ownerNode.nodeName === 'STYLE') {
+            try {
+                const rules = sheet.cssRules;
+                if (rules) {
+                    for (let i = 0; i < rules.length; i++) {
+                        styles += rules[i].cssText + '\n';
+                    }
+                }
+            } catch (e) {
+                // Fallback for CORS-blocked stylesheets
+                const styleEl = sheet.ownerNode as HTMLStyleElement;
+                if (styleEl.textContent) {
+                    styles += styleEl.textContent + '\n';
+                }
+            }
+        }
+    });
+    return styles;
 }
